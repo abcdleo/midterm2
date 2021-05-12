@@ -78,9 +78,14 @@ int ind_publish_last_cycle = -1;
 bool last_cycle = false;
 int total_num_publish = -1;
 
-int acc_data[600];
+int acc_data[6000];
 int acc_length;
-int acc_my_classf[600];
+int acc_my_classf[6000];
+int tf_gesture_ind[10] = {0};
+int flag = 0;
+int flag_ind = 0;
+
+bool publish_1 = true;
 
 // Create an area of memory to use for input, output, and intermediate arrays.
 // The size of this will depend on the model you're using, and may need to be
@@ -96,7 +101,7 @@ int main() {
    	FILE *devin = fdopen(&pc, "r");
    	FILE *devout = fdopen(&pc, "w");
 
-    //thread_internet.start(&func_mqtt);
+    thread_internet.start(&func_mqtt);
     
     while (true) {
         memset(buf, 0, 256);      // clear buffer
@@ -127,10 +132,9 @@ void detect_angle(){
     int16_t pDataXYZ[3]= {0};
     int16_t arcDataXYZ[3] = {0};
     double theta = 0, cos_theta = 0;
-    int index = 0;
-    
+    bool stationary = false;    
 
-        //change of direction
+        //change of direction & stationary
         printf("change of direction\n");
         for (int j = 0; j < acc_length/3 - 1 ; j++){
             for (int i = 0; i < 3; i++){
@@ -154,64 +158,31 @@ void detect_angle(){
                 //printf("angle: %lf\n", theta);
             }
             if (theta > 30){
-                acc_my_classf[j * 3] = 1;
+                acc_my_classf[j] = 1;
                 //printf("acc_my_classf[%d] = 1;", j * 3); 
             }
-            else 
-                acc_my_classf[j * 3] = 0;
-
-            acc_my_classf[j * 3 + 1] = 0;
-            acc_my_classf[j * 3 + 2] = 0;
-        }
-        printf("\n");
-
-        //stationary
-        bool stationary = false;
-        printf("stationary\n");
-        for (int j = 0; j < acc_length/3 - 1 ; j++){
-            for (int i = 0; i < 3; i++){
-                ref_pDataXYZ[i] = acc_data[j * 3 + i];
-                pDataXYZ[i] = acc_data[(j + 1) * 3 + i];
-            }
-            for (int i = 0; i < 3; i++)
-                arcDataXYZ[i] = pDataXYZ[i]- ref_pDataXYZ[i];
-            cos_theta = (square(length(ref_pDataXYZ)) + square(length(pDataXYZ)) - square(length(arcDataXYZ))) / (2 * length(ref_pDataXYZ) * length(pDataXYZ));
-            
-            if (cos_theta <= 1.00 && cos_theta >= -1.00){
-                theta = acos(cos_theta) * 180 / 3.141593;
-                //printf("angle: %lf\n", theta);
-            }
-            else if (cos_theta > 1.00){
-                theta = acos(1.00) * 180 / 3.141593;
-                //printf("angle: %lf\n", theta);
-            }
-            else if (cos_theta < -1.00){
-                theta = acos(-1.00) * 180 / 3.141593;
-                //printf("angle: %lf\n", theta);
-            }
-            if (theta < 5 && !stationary) {
-                acc_my_classf[j * 3] = 2;
+            else if (theta < 5 && !stationary) {
+                acc_my_classf[flag + j] = 2;
                 //printf("acc_my_classf[%d] = 1;", j * 3);
                 stationary = true;
             }
             else if (theta > 5 && stationary) {
-                acc_my_classf[j * 3] = 3;
+                acc_my_classf[flag + j] = 3;
                 //printf("acc_my_classf[%d] = 1;", j * 3); 
                 stationary = false;
             }
             else 
-                acc_my_classf[j * 3] = 0;
+                acc_my_classf[flag + j] = 0;
 
-            acc_my_classf[j * 3 + 1] = 0;
-            acc_my_classf[j * 3 + 2] = 0;
         }
         printf("\n");
+ 
+        for (int i = 0; i < acc_length/3 - 1 ; i++)
+            if (acc_my_classf[flag + i] != 0)
+                printf("acc_my_classf[%d] = %d;\n", i, acc_my_classf[flag + i]); 
 
-        for (int i = 0; i < acc_length; i++)
-            if (acc_my_classf[i] != 0)
-                printf("acc_my_classf[%d] = %d;\n", i, acc_my_classf[i]); 
-
-
+        //printf("tf_gesture_ind[%d] = %d\n", flag_ind, tf_gesture_ind[flag_ind]);
+        //flag_ind++;
 }
 
 inline double length(int16_t * DataXYZ){
@@ -240,6 +211,8 @@ int detect_gesture(){
   bool should_clear_buffer = false;
   bool got_data = false;
   int accelerator_data[600];
+  int limit = 0;
+  int ind = 0;
 
   // The gesture index of the prediction
   int gesture_index;
@@ -345,17 +318,17 @@ int detect_gesture(){
 
         // Produce an output
         if (gesture_index < label_num) {
+            limit++;
+            if (limit == 2){    // 1
+                total_num_publish = 1;
+                thread_UI.terminate();
+            }
 
             acc_data[input_length] = -100000;
             acc_length = input_length;
-            // for (int i = 0; i < input_length + 1; i++){
-            //     //acc_data[i] = accelerator_data[i];
-            //     printf("acceaccelerator_data[%d] = %d\n", i, acc_data[i]);
-            // }
+            tf_gesture_ind[ind++] = gesture_index;
             detect_angle();
-            //printf("acceaccelerator_data[%d] = %d\n", i, acc_data[i]);
-            //printf("acceaccelerator_data[%d] = %d\n", input_length, acc_data[input_length]);
-
+            
             error_reporter->Report(config.output_message[gesture_index]);
             if (angle_threshold == 170)
                 angle_threshold = 30;
@@ -425,18 +398,22 @@ void publish_message(MQTT::Client<MQTTNetwork, Countdown>* client) {
     MQTT::Message message;
     char buff[100];
 
-    confirm_angle_threshold();
-    sprintf(buff, "angle_threshold = %d", angle_threshold);
-    
-    message.qos = MQTT::QOS0;
-    message.retained = false;
-    message.dup = false;
-    message.payload = (void*) buff;
-    message.payloadlen = strlen(buff) + 1;
-    int rc = client->publish(topic, message);
+    //confirm_angle_threshold();
+    // sprintf(buff, "angle_threshold = %d", angle_threshold);
+    if (total_num_publish == 1 && flag_ind != 10 && publish_1) {
+        sprintf(buff, "No.%d classified gesture events = %d", flag_ind, tf_gesture_ind[flag_ind]);    /// !!!!
+        flag_ind ++;
+        message.qos = MQTT::QOS0;
+        message.retained = false;
+        message.dup = false;
+        message.payload = (void*) buff;
+        message.payloadlen = strlen(buff) + 1;
+        int rc = client->publish(topic, message);
 
-    printf("rc:  %d\r\n", rc);
-    printf("Puslish message: %s\r\n", buff);
+        printf("rc:  %d\r\n", rc);
+        printf("Puslish message: %s\r\n", buff);
+        publish_1 = false;
+    }
 }
 
 void publish_message_angle_present(MQTT::Client<MQTTNetwork, Countdown>* client) {
@@ -445,16 +422,7 @@ void publish_message_angle_present(MQTT::Client<MQTTNetwork, Countdown>* client)
     char buff[100];
     int ind = total_num_is_published % 10;
 
-    if (total_num_publish != -1 && (total_num_publish  > total_num_is_published)) {
-        // if (total_num_is_published == ind_publish_limit + 1)
-        //     total_num_is_published = 0;
-
-        // if (ind_publish_limit == 10 && !last_cycle){
-        //     ind_publish_last_cycle = total_num_is_published;
-        //     last_cycle = true;
-        // }
-        
-        //printf("theta_over_angle_threshold[total_num_is_published]\n");
+    if (total_num_publish == 1 ) {
         sprintf(buff, "angle_present = %lf", theta_over_angle_threshold[ind]);    /// !!!!
         total_num_is_published++;
         message.qos = MQTT::QOS0;
@@ -539,9 +507,10 @@ int func_mqtt(){
 	mqtt_thread.start(callback(&mqtt_queue, &EventQueue::dispatch_forever));
     mqtt_thread_angle_present.start(callback(&mqtt_queue_angle_present, &EventQueue::dispatch_forever));
     
-    Ticker flipper;
-    button.rise(mqtt_queue.event(&publish_message, &client));
-    flipper.attach(mqtt_queue_angle_present.event(&publish_message_angle_present, &client), 100ms);
+    Ticker flipper1;
+    Ticker flipper2;
+    flipper1.attach(mqtt_queue.event(&publish_message, &client),100ms);
+    //flipper2.attach(mqtt_queue_angle_present.event(&publish_message_angle_present, &client), 100ms);
 
    	int num = 0;
     while (num != 5) {
