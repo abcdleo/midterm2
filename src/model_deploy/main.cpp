@@ -86,6 +86,7 @@ int flag = 0;
 int flag_ind = 0;
 
 bool publish_1 = true;
+int flag_ind2 = 0;
 
 // Create an area of memory to use for input, output, and intermediate arrays.
 // The size of this will depend on the model you're using, and may need to be
@@ -175,11 +176,13 @@ void detect_angle(){
                 acc_my_classf[flag + j] = 0;
 
         }
-        printf("\n");
- 
-        for (int i = 0; i < acc_length/3 - 1 ; i++)
-            if (acc_my_classf[flag + i] != 0)
-                printf("acc_my_classf[%d] = %d;\n", i, acc_my_classf[flag + i]); 
+        //printf("\n");
+        flag += acc_length/3;
+        acc_my_classf[flag++] = -1;
+
+        // for (int i = 0; i < acc_length/3 - 1 ; i++)
+        //     if (acc_my_classf[flag + i] != 0)
+        //         printf("acc_my_classf[%d] = %d;\n", i, acc_my_classf[flag + i]); 
 
         //printf("tf_gesture_ind[%d] = %d\n", flag_ind, tf_gesture_ind[flag_ind]);
         //flag_ind++;
@@ -319,8 +322,9 @@ int detect_gesture(){
         // Produce an output
         if (gesture_index < label_num) {
             limit++;
-            if (limit == 2){    // 1
+            if (limit == 11){    // 1
                 total_num_publish = 1;
+                printf("END\n");
                 thread_UI.terminate();
             }
 
@@ -422,8 +426,14 @@ void publish_message_angle_present(MQTT::Client<MQTTNetwork, Countdown>* client)
     char buff[100];
     int ind = total_num_is_published % 10;
 
-    if (total_num_publish == 1 ) {
-        sprintf(buff, "angle_present = %lf", theta_over_angle_threshold[ind]);    /// !!!!
+    if (total_num_publish == 1 && !publish_1) {
+        sprintf(buff, "The extracted features = ");    /// !!!!
+        while (acc_my_classf[flag_ind2] != -1){
+            sprintf(buff+strlen(buff), "%d ",acc_my_classf[flag_ind2++]);
+        }
+        flag_ind2++;
+        sprintf(buff+strlen(buff), "\n ");
+
         total_num_is_published++;
         message.qos = MQTT::QOS0;
         message.retained = false;
@@ -434,6 +444,7 @@ void publish_message_angle_present(MQTT::Client<MQTTNetwork, Countdown>* client)
 
         printf("rc:  %d\r\n", rc);
         printf("Puslish message: %s\r\n", buff);
+        publish_1 = true;
     }
 }
 
@@ -510,7 +521,7 @@ int func_mqtt(){
     Ticker flipper1;
     Ticker flipper2;
     flipper1.attach(mqtt_queue.event(&publish_message, &client),100ms);
-    //flipper2.attach(mqtt_queue_angle_present.event(&publish_message_angle_present, &client), 100ms);
+    flipper2.attach(mqtt_queue_angle_present.event(&publish_message_angle_present, &client), 100ms);
 
    	int num = 0;
     while (num != 5) {
