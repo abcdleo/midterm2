@@ -1,8 +1,5 @@
 # midterm2
 
-LED1 代表 gesture_UI mode;
-LED2 代表 tilt_angle mode;
-LED3 代表 偵測reference angle;
 將mbed板與uLCD接上電腦
 
 1. 開 new terminal
@@ -31,12 +28,9 @@ LED3 代表 偵測reference angle;
 
 13. terminal2 會顯示會顯示wifi連線，與ip位址，再來傳五次訊息至terminal1，terminal1會顯示接收到
 
-14. 在terminal1 輸入 /gesture_UI/run，按下enter，此時LED1會亮起，螢幕上會有 "Set up successful...\n"，這時候揮動mbed板，就會增加設定的角度，角度會顯示在uLCD上
+14. 在terminal1 輸入 /1/run，按下enter，螢幕上會有 "Set up successful...\n"，這時候揮動mbed板，就會將判斷到的手勢在terminal1上顯示
 
-15. 選擇完角度之後，按下USER_BUTTON，uLCD會顯示CONFIRM，terminal2會接收到設定的角度，LED1會熄滅
+15. 累積判斷10個手勢之後會結束程式，然後將model偵測的手勢傳到terminal2
 
-16. 在terminal2 輸入 /tilt_angle/run，按下enter，此時LED3會亮起，請在兩秒內將mbed板子平放以利偵測基準角度，待LED3熄滅，LED2會亮起，然後會在terminal1上顯示當前角度
-
-17. 緩緩傾斜mbed板，當角度超過設定角度時，會將超過的角度數值傳到terminal2
-
-18. 當連續超過10次偵測到角度超過設定角度時，LED2會熄滅，偵測角度會終止，此時可以在RPC繼續輸入東西
+ 因為我打MQTT時，想要將我所分析的資料，傳遞到terminal2時會有BUG，但礙於時間我已經上傳了，只要將419行與524行註解，程式就可以正常運作到，將10筆model偵測的手勢傳到terminal2。
+ 10筆model偵測的手勢和與分析的結果，都有利用全域變數儲存，我剩下尚未實做的部分應該只剩下6-2、7-1和7-2。
